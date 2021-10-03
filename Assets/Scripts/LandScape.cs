@@ -6,31 +6,47 @@ using System.Collections.Generic;
 
 static class Vector3IntExtrensions
 {
+    const float EPSILON = 0.0001f;
+
+    static int mod(int num, int m)
+    {
+        return (num % m + m) % m;
+    }
+
+    static int div(int num, int d)
+    {
+        return num >= 0 ? num / d : num / d - 1;
+    }
     public static Vector3Int DivideBy(this Vector3Int vec, int i)
     {
-        return new Vector3Int(vec.x / i, vec.y / i, vec.z / i);
+        return new Vector3Int(div(vec.x, i), div(vec.y, i), div(vec.z, i));
     }
     public static Vector3Int Modolo(this Vector3Int vec, int i)
     {
-        return new Vector3Int(vec.x % i, vec.y % i, vec.z % i);
+        return new Vector3Int(mod(vec.x, i), mod(vec.y, i), mod(vec.z, i));
     }
 
     public static bool Approximately(this Vector3Int v1, Vector3 v2)
     {
-        return Mathf.Approximately(v1.x, v2.x) && Mathf.Approximately(v1.y, v2.y) && Mathf.Approximately(v1.z, v2.z);
+        return Mathf.Abs(v1.x - v2.x) + Mathf.Abs(v1.y - v2.y) + Mathf.Abs(v1.z - v2.z) < EPSILON;
     }
     public static bool Approximately(this Vector3 v1, Vector3Int v2)
     {
-        return Mathf.Approximately(v1.x, v2.x) && Mathf.Approximately(v1.y, v2.y) && Mathf.Approximately(v1.z, v2.z);
+        return Mathf.Abs(v1.x - v2.x) + Mathf.Abs(v1.y - v2.y) + Mathf.Abs(v1.z - v2.z) < EPSILON;
     }
     public static bool Approximately(this Vector3 v1, Vector3 v2)
     {
-        return Mathf.Approximately(v1.x, v2.x) && Mathf.Approximately(v1.y, v2.y) && Mathf.Approximately(v1.z, v2.z);
+        return Mathf.Abs(v1.x - v2.x) + Mathf.Abs(v1.y - v2.y) + Mathf.Abs(v1.z - v2.z) < EPSILON;
     }
 
     public static Vector3Int roundToInt(this Vector3 vec)
     {
         return new Vector3Int(Mathf.RoundToInt(vec.x), Mathf.RoundToInt(vec.y), Mathf.RoundToInt(vec.z));
+    }
+
+    public static Vector3 ToVector3(this Vector3Int vec)
+    {
+        return new Vector3(vec.x, vec.y, vec.z);
     }
 
 
@@ -48,7 +64,7 @@ class Landscape
     }
     public const int CHUNKSIZE = 10;
     public const int BLOCKSIZE = 1;
-    public const float NOISEAMPLITUDE = 6f;
+    public const float NOISEAMPLITUDE = 0.2f; //6f;
     public const float NOISESCALE = 0.2f;
     public const int CHUNKRADIUSAROUNDPLAYER = 2;
     public const int GETSURROUNDINGRADIUS = 2;
@@ -61,12 +77,8 @@ class Landscape
     public Dictionary<Vector3Int, BlockType> GetSurrounding(Vector3Int blockPos)
     {
         Dictionary<Vector3Int, BlockType> surrounding = new Dictionary<Vector3Int, BlockType>();
-        int xi = 0;
-        int yi = 0;
-        int xy = 0;
         for (int x = blockPos.x - GETSURROUNDINGRADIUS; x <= blockPos.x + GETSURROUNDINGRADIUS; x++)
         {
-            xi++;
             for (int y = blockPos.y - GETSURROUNDINGRADIUS; y <= blockPos.y + GETSURROUNDINGRADIUS; y++)
             {
                 for (int z = blockPos.z - GETSURROUNDINGRADIUS; z <= blockPos.z + GETSURROUNDINGRADIUS; z++)
@@ -74,8 +86,11 @@ class Landscape
                     Vector3Int pos = new Vector3Int(x, y, z);
                     Vector3Int chunkPos = pos.DivideBy(CHUNKSIZE);
                     Vector3Int blockPosInChunk = pos.Modolo(CHUNKSIZE);
+
                     Chunk c = GetChunk(chunkPos);
-                    surrounding[pos] = c[blockPosInChunk];
+                    if (c != null) surrounding[pos] = c[blockPosInChunk];
+                    else { surrounding[pos] = BlockType.None; Debug.Log("ERRRR\n"); }
+
                 }
             }
         }

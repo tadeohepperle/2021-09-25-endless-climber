@@ -36,14 +36,16 @@ public class InputHandler : MonoBehaviour
     Vector3Int GetInput()
     {
         Vector3Int input = Vector3Int.zero;
-        if (Input.GetKeyDown(KeyCode.UpArrow))
+        if (Input.GetKey(KeyCode.UpArrow))
             input += Vector3Int.forward;
-        if (Input.GetKeyDown(KeyCode.DownArrow))
+        if (Input.GetKey(KeyCode.DownArrow))
             input += Vector3Int.back;
-        if (Input.GetKeyDown(KeyCode.RightArrow))
+        if (Input.GetKey(KeyCode.RightArrow))
             input += Vector3Int.right;
-        if (Input.GetKeyDown(KeyCode.LeftArrow))
+        if (Input.GetKey(KeyCode.LeftArrow))
             input += Vector3Int.left;
+        if (input.sqrMagnitude > 1) return Vector3Int.zero; // TODO
+
         return input;
     }
 

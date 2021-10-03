@@ -5,9 +5,10 @@ using UnityEngine;
 public class PlayerMovement : MonoBehaviour
 {
     const float MOVEMENT_STEP = 0.05f;
+    public Material mat;
     Transform playerTransform;
     public Vector3 actualPos;
-    private Vector3Int _blockpos;
+    public Vector3Int _blockpos;
     public Vector3Int BlockPos
 
     {
@@ -18,19 +19,29 @@ public class PlayerMovement : MonoBehaviour
         }
     }
     public Edge edge = new Edge(EdgeMode.None);
+
     Dictionary<Vector3Int, BlockType> surrounding;
 
-    // Start is called before the first frame update
-    void Start()
+    public GameObject point1;
+    public GameObject point2;
+    public GameObject actualPosObj;
+    public GameObject blockPosObj;
+
+
+    public static PlayerMovement Instance;
+
+    void Awake()
     {
-        Initialize();
+        if (Instance == null) Instance = this;
+        else Destroy(this);
     }
 
-    void Initialize()
+    public void Initialize()
     {
         playerTransform = PlayerLocator.Instance.playerTransForm;
-        actualPos = Vector3.zero;
-        BlockPos = Vector3Int.zero;
+        actualPos = new Vector3(0, 4, 0);
+        BlockPos = new Vector3Int(0, 4, 0);
+        surrounding = Landscape.Instance.GetSurrounding(BlockPos);
     }
 
     void Update()
@@ -38,44 +49,132 @@ public class PlayerMovement : MonoBehaviour
 
     }
 
-
+    public Vector3Int input;
+    public Vector3Int targetBlockPos;
+    public Vector3 movementDirection;
     void FixedUpdate()
     {
-        Vector3Int input = InputHandler.CurrentInput;
-        Vector3Int targetBlockPos = CalculateTargetBlockPos(input);
+        input = InputHandler.CurrentInput;
 
-        Vector3 movementDirection = targetBlockPos - BlockPos;
-        actualPos += movementDirection * MOVEMENT_STEP;
+        bool up = false;
+        targetBlockPos = CalculateTargetBlockPos(input, ref up);
+
+        movementDirection = (((Vector3)targetBlockPos) - actualPos).normalized;
+
+        actualPos += (movementDirection) * MOVEMENT_STEP;
+
         Vector3Int prevBlockPos = BlockPos;
         BlockPos = actualPos.roundToInt();
         if (BlockPos != prevBlockPos)
         {
-            surrounding = Landscape.Instance.GetSurrounding(_blockpos);
+
+            surrounding = Landscape.Instance.GetSurrounding(BlockPos);
         }
-        RecalculateRollEdge(movementDirection);
-        UpdatePlayerTransform();
-
+        if (actualPos.Approximately(BlockPos))
+        {
+            actualPos = BlockPos;
+        }
+        /*
+        RecalculateRollEdge(targetBlockPos, up);
+        // UpdatePlayerTransform();
+        point1.transform.position = edge.point1;
+        point2.transform.position = edge.point2;
+        actualPosObj.transform.position = actualPos + Vector3Int.one / 2;
+        blockPosObj.transform.position = BlockPos + Vector3Int.one/2;
+        */
+        actualPosObj.transform.position = actualPos + (Vector3.one / 2);
+        blockPosObj.transform.position = BlockPos + (Vector3.one / 2);
+        DebugUtility.Watch("actualPos", actualPos.ToString());
+        DebugUtility.Watch("blockPos", BlockPos.ToString());
     }
 
-    bool JumpToNewBlockPosNeeded()
-    {
-        Vector3 direction = actualPos - BlockPos;
-        return (direction.sqrMagnitude > 0.25); // more than 0.5 away 
 
+    bool SameDirectionOrZero(Vector3 vec1, Vector3 vec2)
+    {
+        float addedUpsqrMagnitude = (vec1 + vec2).sqrMagnitude;
+        return Vector3.Cross(vec1, vec2).sqrMagnitude == 0 && addedUpsqrMagnitude >= vec1.sqrMagnitude && addedUpsqrMagnitude >= vec2.sqrMagnitude;
     }
 
-    Vector3Int CalculateTargetBlockPos(Vector3Int input)
-    {
-        // TODO
-        if (actualPos.x >= BlockPos.x) edge = new Edge(EdgeMode.Right);
-        else edge = new Edge(EdgeMode.Left);
 
-        return Vector3Int.right + BlockPos;
-    }
-    void RecalculateRollEdge(Vector3 movementDirection)
+    bool VerifyInput(Vector3Int input)
     {
-        if (actualPos.x >= BlockPos.x) edge = new Edge(EdgeMode.Right);
-        else edge = new Edge(EdgeMode.Left);
+        Vector3Int[] valid = new Vector3Int[5] { new Vector3Int(0, 0, 0), new Vector3Int(1, 0, 0), new Vector3Int(-1, 0, 0), new Vector3Int(0, 0, 1), new Vector3Int(0, 0, -1) };
+        bool containsInput = false;
+        foreach (Vector3Int v in valid)
+        {
+            if (input == v)
+            {
+                containsInput = true;
+            }
+        }
+        if (containsInput == false) throw new System.ArgumentException("input is not valid!");
+        return containsInput;
+    }
+
+    Vector3Int CalculateTargetBlockPos(Vector3Int input, ref bool up)
+    {
+        Debug.Log("------");
+        up = false;
+        Vector3 actualDir = actualPos - BlockPos;
+        bool HorizontalDirFree()
+        {
+            return surrounding[BlockPos + input] == BlockType.None &&
+            surrounding[BlockPos + Vector3Int.up] == BlockType.None &&
+            surrounding[BlockPos + input + Vector3Int.up] == BlockType.None &&
+            (surrounding[BlockPos + input + Vector3Int.down] == BlockType.Filled || surrounding[BlockPos + Vector3Int.down] == BlockType.Filled);
+        }
+        bool VecticalDirFree()
+        {
+            return surrounding[BlockPos + input] == BlockType.Filled &&
+            surrounding[BlockPos + Vector3Int.up] == BlockType.None &&
+            surrounding[BlockPos + input + Vector3Int.up] == BlockType.None &&
+            surrounding[BlockPos - input] == BlockType.None &&
+            surrounding[BlockPos - input + Vector3Int.up] == BlockType.None;
+        }
+        bool CanFall()
+        {
+            return SameDirectionOrZero(actualDir, Vector3.down) && surrounding[BlockPos + Vector3Int.down] == BlockType.None;
+        }
+        Vector3Int targetBlockPos = BlockPos;
+        VerifyInput(input);
+        bool horizontalDirFree = HorizontalDirFree();
+        bool vecticalDirFree = VecticalDirFree();
+
+        if (input == Vector3Int.zero)
+        {
+            // roll back to stay position, do nothing here
+        }
+        else
+        {
+
+            if (actualDir.Approximately(Vector3.zero)) actualDir = Vector3.zero;
+
+            DebugUtility.Watch("verticalClimb", vecticalDirFree.ToString());
+            DebugUtility.Watch("horizontal Move possible", horizontalDirFree.ToString());
+
+            if (horizontalDirFree && SameDirectionOrZero(input, actualDir))
+            {
+                targetBlockPos = BlockPos + input;
+            }
+            else if (vecticalDirFree && SameDirectionOrZero(Vector3.up, actualDir))
+            {
+                up = true;
+                targetBlockPos = BlockPos + Vector3Int.up;
+            }
+
+        }
+        if (targetBlockPos == BlockPos && CanFall() && !(horizontalDirFree && input != Vector3.zero))
+        {
+            targetBlockPos = BlockPos + Vector3Int.down;
+        }
+        //DebugUtility.Watch("targetBlockPos", targetBlockPos.ToString());
+        return targetBlockPos;
+    }
+    void RecalculateRollEdge(Vector3Int targetBlockPos, bool up)
+    {
+        Vector3Int actualDirFromBlockPos = (actualPos - (Vector3)BlockPos).normalized.roundToInt();
+
+        edge = new Edge(actualDirFromBlockPos, up);
     }
 
     void UpdatePlayerTransform() //Vector3 actualPos, Edge edge)
@@ -133,7 +232,7 @@ public class PlayerMovement : MonoBehaviour
         // apply angle in right direction:
         playerTransform.rotation = Quaternion.Euler(edge.EdgeDirection * angle);
         // adjust y level of playerTransform.position
-        playerTransform.position = playerTransform.position - directionOfGroundToRollOn * overreachingEndLength;
+        playerTransform.position -= directionOfGroundToRollOn * overreachingEndLength;
         // Gizmos.color = Color.red;
         // Gizmos.DrawLine(playerCubeEdgeMiddlePoint + Vector3.forward, playerCubeEdgeMiddlePoint - Vector3.forward);
         // Gizmos.DrawLine(playerMiddlePoint, playerCubeEdgeMiddlePoint);
@@ -185,6 +284,36 @@ public struct Edge
         get { return new Vector3(point1.x + point2.x, point1.y + point2.y, point1.z + point2.z) / 2; }
     }
 
+    public Edge(Vector3Int direction, bool up)
+    {
+        EdgeMode em;
+        Dictionary<(Vector3Int, bool), EdgeMode> d = new Dictionary<(Vector3Int, bool), EdgeMode>
+        {
+            [(Vector3Int.right, false)] = EdgeMode.Right,
+            [(Vector3Int.right, true)] = EdgeMode.RightUp,
+            [(Vector3Int.left, false)] = EdgeMode.Left,
+            [(Vector3Int.left, true)] = EdgeMode.LeftUp,
+            [(Vector3Int.forward, false)] = EdgeMode.Forward,
+            [(Vector3Int.forward, true)] = EdgeMode.ForwardUp,
+            [(Vector3Int.back, false)] = EdgeMode.Back,
+            [(Vector3Int.back, true)] = EdgeMode.BackUp,
+        };
+        if (d.ContainsKey((direction, up)))
+        {
+            em = d[(direction, up)];
+        }
+        else
+        {
+            em = EdgeMode.None;
+        }
+        this.edgeMode = em;
+        this.point1 = new Vector3Int();
+        this.point2 = new Vector3Int();
+        (Vector3Int p1, Vector3Int p2) = Points(em);
+        this.point1 = p1;
+        this.point2 = p2;
+    }
+
     public Vector3 EdgeDirection
     {
         get { return point2 - point1; }
@@ -192,11 +321,10 @@ public struct Edge
 
     // public Edge() : this(EdgeMode.None) { }
 
-
-    public Edge(EdgeMode edgeMode)
+    (Vector3Int, Vector3Int) Points(EdgeMode em)
     {
-        this.edgeMode = edgeMode;
-        switch (edgeMode)
+        Vector3Int point1, point2;
+        switch (em)
         {
 
             case (EdgeMode.Forward):
@@ -236,5 +364,18 @@ public struct Edge
                 point2 = Vector3Int.zero;
                 break;
         }
+        return (point1, point2);
+    }
+
+
+    public Edge(EdgeMode edgeMode)
+    {
+        this.edgeMode = edgeMode;
+        this.point1 = new Vector3Int();
+        this.point2 = new Vector3Int();
+        (Vector3Int p1, Vector3Int p2) = Points(edgeMode);
+        this.point1 = p1;
+        this.point2 = p2;
+
     }
 }
