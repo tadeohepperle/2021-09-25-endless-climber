@@ -3,9 +3,42 @@ using UnityEngine;
 using System;
 using System.Collections.Generic;
 
+
+static class Vector3IntExtrensions
+{
+    public static Vector3Int DivideBy(this Vector3Int vec, int i)
+    {
+        return new Vector3Int(vec.x / i, vec.y / i, vec.z / i);
+    }
+    public static Vector3Int Modolo(this Vector3Int vec, int i)
+    {
+        return new Vector3Int(vec.x % i, vec.y % i, vec.z % i);
+    }
+
+    public static bool Approximately(this Vector3Int v1, Vector3 v2)
+    {
+        return Mathf.Approximately(v1.x, v2.x) && Mathf.Approximately(v1.y, v2.y) && Mathf.Approximately(v1.z, v2.z);
+    }
+    public static bool Approximately(this Vector3 v1, Vector3Int v2)
+    {
+        return Mathf.Approximately(v1.x, v2.x) && Mathf.Approximately(v1.y, v2.y) && Mathf.Approximately(v1.z, v2.z);
+    }
+    public static bool Approximately(this Vector3 v1, Vector3 v2)
+    {
+        return Mathf.Approximately(v1.x, v2.x) && Mathf.Approximately(v1.y, v2.y) && Mathf.Approximately(v1.z, v2.z);
+    }
+
+    public static Vector3Int roundToInt(this Vector3 vec)
+    {
+        return new Vector3Int(Mathf.RoundToInt(vec.x), Mathf.RoundToInt(vec.y), Mathf.RoundToInt(vec.z));
+    }
+
+
+}
+
+
 class Landscape
 {
-
 
 
     private static Landscape _instance;
@@ -18,11 +51,36 @@ class Landscape
     public const float NOISEAMPLITUDE = 6f;
     public const float NOISESCALE = 0.2f;
     public const int CHUNKRADIUSAROUNDPLAYER = 2;
+    public const int GETSURROUNDINGRADIUS = 2;
 
     Dictionary<Vector3Int, Chunk> _chunks = new Dictionary<Vector3Int, Chunk>();
 
 
     private Vector3Int lastUpdateChunkPos = Vector3Int.zero;
+
+    public Dictionary<Vector3Int, BlockType> GetSurrounding(Vector3Int blockPos)
+    {
+        Dictionary<Vector3Int, BlockType> surrounding = new Dictionary<Vector3Int, BlockType>();
+        int xi = 0;
+        int yi = 0;
+        int xy = 0;
+        for (int x = blockPos.x - GETSURROUNDINGRADIUS; x <= blockPos.x + GETSURROUNDINGRADIUS; x++)
+        {
+            xi++;
+            for (int y = blockPos.y - GETSURROUNDINGRADIUS; y <= blockPos.y + GETSURROUNDINGRADIUS; y++)
+            {
+                for (int z = blockPos.z - GETSURROUNDINGRADIUS; z <= blockPos.z + GETSURROUNDINGRADIUS; z++)
+                {
+                    Vector3Int pos = new Vector3Int(x, y, z);
+                    Vector3Int chunkPos = pos.DivideBy(CHUNKSIZE);
+                    Vector3Int blockPosInChunk = pos.Modolo(CHUNKSIZE);
+                    Chunk c = GetChunk(chunkPos);
+                    surrounding[pos] = c[blockPosInChunk];
+                }
+            }
+        }
+        return surrounding;
+    }
 
     public void SendPlayerPositionForUpdates(Vector3 playerPosition)
     {
@@ -125,6 +183,12 @@ class Landscape
     public Chunk this[int x, int y, int z]
     {
         get { return GetChunk(x, y, z); }
+
+    }
+
+    public Chunk this[Vector3Int vec]
+    {
+        get { return GetChunk(vec); }
 
     }
 
