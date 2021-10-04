@@ -18,6 +18,7 @@ public class GameManager : MonoBehaviour
     {
         Landscape.Instance.UpdateChunkGameObjectListToChunkPos(Vector3Int.zero);
         PlayerMovement.Instance.Initialize();
+        CameraFollow.Instance.Initialize();
     }
 
     // Update is called once per frame

@@ -64,7 +64,7 @@ class Landscape
     }
     public const int CHUNKSIZE = 10;
     public const int BLOCKSIZE = 1;
-    public const float NOISEAMPLITUDE = 0.2f; //6f;
+    public const float NOISEAMPLITUDE = 6f;
     public const float NOISESCALE = 0.2f;
     public const int CHUNKRADIUSAROUNDPLAYER = 2;
     public const int GETSURROUNDINGRADIUS = 2;
@@ -73,6 +73,7 @@ class Landscape
 
 
     private Vector3Int lastUpdateChunkPos = Vector3Int.zero;
+
 
     public Dictionary<Vector3Int, BlockType> GetSurrounding(Vector3Int blockPos)
     {
@@ -167,6 +168,11 @@ class Landscape
     {
         Vector3 v = playerPosition / (CHUNKSIZE * BLOCKSIZE);
         return new Vector3Int((int)v.x, (int)v.y, (int)v.z);
+    }
+
+    public Vector3Int GetPlayerStartingPos()
+    {
+        return new Vector3Int(0, (int)GetNoise(new Vector3Int(0, 0, 0)), 0);
     }
 
 
@@ -267,10 +273,10 @@ class Landscape
         c.Iter((int x, int y, int z) =>
         {
             Vector3Int globalPos = Landscape.GlobalPos(c.pos, new Vector3Int(x, y, z));
-            float cutoff = (globalPos.x + globalPos.z) / 2 + 3;
+            float cutoff = (globalPos.x + globalPos.z) / 2;
             // add some PerlinNoise:
             float noise = GetNoise(globalPos);
-            cutoff -= noise;
+            cutoff += noise;
             bool filled = globalPos.y < cutoff;
             if (filled) c.filledCount++;
             c.blocks[x, y, z] = filled ? BlockType.Filled : BlockType.None;
