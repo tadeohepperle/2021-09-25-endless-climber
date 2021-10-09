@@ -2,7 +2,10 @@
 using UnityEngine;
 using System;
 using System.Collections.Generic;
-
+using Unity.Collections;
+using Unity.Jobs;
+using System.Diagnostics;
+using System.Threading.Tasks;
 
 static class Vector3IntExtrensions
 {
@@ -55,20 +58,18 @@ static class Vector3IntExtrensions
 
 class Landscape
 {
-
-
     private static Landscape _instance;
     public static Landscape Instance
     {
         get { if (_instance == null) _instance = new Landscape(); return _instance; }
     }
+
     public const int CHUNKSIZE = 10;
     public const int BLOCKSIZE = 1;
     public const float NOISEAMPLITUDE = 6f;
     public const float NOISESCALE = 0.2f;
     public const int CHUNKRADIUSAROUNDPLAYER = 2;
     public const int GETSURROUNDINGRADIUS = 2;
-
     Dictionary<Vector3Int, Chunk> _chunks = new Dictionary<Vector3Int, Chunk>();
 
 
@@ -90,7 +91,7 @@ class Landscape
 
                     Chunk c = GetChunk(chunkPos);
                     if (c != null) surrounding[pos] = c[blockPosInChunk];
-                    else { surrounding[pos] = BlockType.None; Debug.Log("ERRRR\n"); }
+                    else { surrounding[pos] = BlockType.None; UnityEngine.Debug.Log("ERRRR\n"); }
 
                 }
             }
@@ -101,8 +102,6 @@ class Landscape
     public void SendPlayerPositionForUpdates(Vector3 playerPosition)
     {
         Vector3Int chunkPos = ChunkPosFromPlayerPosition(playerPosition);
-        //Debug.Log(chunkPos);
-        //Debug.Log(chunkPos == lastUpdateChunkPos);
         if (chunkPos != lastUpdateChunkPos)
         {
             lastUpdateChunkPos = new Vector3Int(chunkPos.x, chunkPos.y, chunkPos.z);
@@ -111,9 +110,9 @@ class Landscape
 
     }
 
-    public void UpdateChunkGameObjectListToChunkPos(Vector3Int chunkPos)
+    public async void UpdateChunkGameObjectListToChunkPos(Vector3Int chunkPos)
     {
-
+        List<ChunkData> newlyCreatedChunks = new List<ChunkData>();
         foreach (KeyValuePair<Vector3Int, Chunk> keyValuePair in _chunks)
         {
             keyValuePair.Value.markedForDeletion = true;
@@ -126,21 +125,19 @@ class Landscape
                 {
                     Vector3Int vec3 = new Vector3Int(x, y, z);
                     Chunk chunkAtVec3 = GetChunk(vec3);
-
-
                     if (chunkAtVec3 != null)
                     {
                         chunkAtVec3.markedForDeletion = false;
-
                     }
                     else
                     {
                         AddChunk(vec3);
+                        newlyCreatedChunks.Add(GetChunk(vec3).data);
                     }
-
                 }
             }
         }
+        // REMOVE UNNECESSARY CHUNKS:
         List<Vector3Int> toRemove = new List<Vector3Int>();
         foreach (KeyValuePair<Vector3Int, Chunk> keyValuePair in _chunks)
         {
@@ -154,7 +151,48 @@ class Landscape
             RemoveChunk(vec);
         }
 
+        // GENERATE NEWLY ADDED CHUNKS:
+        Stopwatch s = new Stopwatch();
+        s.Start();
 
+        // Wihtout multithreding: approx. 1,4ms per Chunk
+        // for (int i = 0; i < newlyCreatedChunks.Count; i++)
+        // {
+        //     newlyCreatedChunks[i].GenerateBlocks();
+        //     newlyCreatedChunks[i].GenerateMesh();
+        //     var pos = newlyCreatedChunks[i].pos;
+        //     Chunk c = GetChunk(pos);
+        //     c.data = newlyCreatedChunks[i];
+        //     c.CreateGameObject();
+        // }
+
+        // With multithreading: approx. 0,4ms per Chunk
+        List<Task<ChunkData>> taskList = new List<Task<ChunkData>>();
+        for (int i = 0; i < newlyCreatedChunks.Count; i++)
+        {
+            taskList.Add(ChunkGenerationTask(newlyCreatedChunks[i]));
+        }
+        var results = await Task.WhenAll(taskList);
+        for (int i = 0; i < results.Length; i++)
+        {
+            var pos = results[i].pos;
+            Chunk c = GetChunk(pos);
+            c.data = results[i];
+            c.CreateGameObject();
+        }
+
+        s.Stop();
+        UnityEngine.Debug.Log("Time elampsed: " + s.ElapsedMilliseconds + "ms | Chunks handled: " + newlyCreatedChunks.Count + " | Time per Chunk: " + (float)s.ElapsedMilliseconds / newlyCreatedChunks.Count + "ms");
+    }
+
+    public Task<ChunkData> ChunkGenerationTask(ChunkData chunkData)
+    {
+        return Task.Run(() =>
+        {
+            chunkData.GenerateBlocks();
+            chunkData.GenerateMesh();
+            return chunkData;
+        });
     }
 
 
@@ -239,7 +277,7 @@ class Landscape
         Chunk c = GetChunk(vec);
         if (c != null)
         {
-            c.Deactivate();
+            c.DestroyGameObject();
             this._chunks.Remove(vec); return true;
         }
         else return false;
@@ -259,31 +297,39 @@ class Landscape
         }
         else
         {
-            Chunk newChunk = this.GenerateChunk(vec);
+            Chunk newChunk = new Chunk(vec);
             _chunks[vec] = newChunk;
             return true;
         }
     }
 
 
-    public Chunk GenerateChunk(Vector3Int pos)
-    {
+    // public Chunk GenerateChunk(Vector3Int pos)
+    // {
 
-        Chunk c = new Chunk(pos);
-        c.Iter((int x, int y, int z) =>
-        {
-            Vector3Int globalPos = Landscape.GlobalPos(c.pos, new Vector3Int(x, y, z));
-            float cutoff = (globalPos.x + globalPos.z) / 2;
-            // add some PerlinNoise:
-            float noise = GetNoise(globalPos);
-            cutoff += noise;
-            bool filled = globalPos.y < cutoff;
-            if (filled) c.filledCount++;
-            c.blocks[x, y, z] = filled ? BlockType.Filled : BlockType.None;
-        });
-        c.Activate(); // vielleicht auslagern in asynchrone methode
-        c.landscape = this;
-        return c;
+    //     Chunk c = new Chunk(pos);
+    //     c.Iter((int x, int y, int z) =>
+    //     {
+    //         Vector3Int globalPos = Landscape.GlobalPos(c.pos, new Vector3Int(x, y, z));
+    //         float cutoff = (globalPos.x + globalPos.z) / 2;
+    //         // add some PerlinNoise:
+    //         float noise = GetNoise(globalPos);
+    //         cutoff += noise;
+    //         bool filled = globalPos.y < cutoff;
+    //         if (filled) c.filledCount++;
+    //         c.blocks[x, y, z] = filled ? BlockType.Filled : BlockType.None;
+    //     });
+    //     c.Activate(); // vielleicht auslagern in asynchrone methode
+    //     c.landscape = this;
+    //     return c;
+    // }
+
+    public BlockType GetBlockType(Vector3Int globalPos)
+    {
+        float height = (globalPos.x + globalPos.z) / 2;
+        height += GetNoise(globalPos);
+        if (globalPos.y > height) return BlockType.None;
+        else return BlockType.Filled;
     }
 
     public float GetNoise(Vector3Int pos)
@@ -311,31 +357,45 @@ enum BlockType : short
     Filled = 1,
 }
 
-class Chunk
+
+class ChunkData
 {
-    public GameObject gameObject;
-    public Landscape landscape;
     public Vector3Int pos;
     public BlockType[,,] blocks;
     public int filledCount;
-    public bool markedForDeletion;
+    public bool generated;
+    public Vector3[] meshVertices;
+    public Vector3[] meshNormals;
+    public int[] meshTriangles;
+    public Vector2[] meshUV;
 
-    public bool IsUniform()
+    public ChunkData(Vector3Int pos)
     {
-        return filledCount == 0 || filledCount == Math.Pow(Landscape.CHUNKSIZE, 3);
+        this.pos = pos;
+        this.blocks = new BlockType[Landscape.CHUNKSIZE, Landscape.CHUNKSIZE, Landscape.CHUNKSIZE];
+        this.filledCount = 0;
+        this.generated = false;
+        this.meshVertices = new Vector3[0];
+        this.meshNormals = new Vector3[0];
+        this.meshTriangles = new int[0];
+        this.meshUV = new Vector2[0];
     }
 
-    private bool _activated;
-    public bool Activated
+    public void GenerateBlocks()
     {
-        get { return _activated; }
-    }
 
-    bool IsValidIndex(int x, int y, int z)
-    {
-        return x >= 0 && x < this.blocks.GetLength(0) && y >= 0 && y < this.blocks.GetLength(0) && z >= 0 && z < this.blocks.GetLength(0);
+        for (int x = 0; x < Landscape.CHUNKSIZE; x++)
+        {
+            for (int y = 0; y < Landscape.CHUNKSIZE; y++)
+            {
+                for (int z = 0; z < Landscape.CHUNKSIZE; z++)
+                {
+                    Vector3Int globalPos = Landscape.GlobalPos(this.pos, new Vector3Int(x, y, z));
+                    this.blocks[x, y, z] = Landscape.Instance.GetBlockType(globalPos);
+                }
+            }
+        }
     }
-
     public BlockType this[Vector3Int v]
     {
         get => this[v.x, v.y, v.z];
@@ -361,27 +421,13 @@ class Chunk
         }
     }
 
-    Vector3 RelativePosition(int x, int y, int z)
+    public void GenerateMesh()
     {
-        return new Vector3(x, y, z) * Landscape.BLOCKSIZE;
-    }
-
-    public Vector3 GlobalPosition
-    {
-        get { return new Vector3(this.pos.x, this.pos.y, this.pos.z) * Landscape.CHUNKSIZE * Landscape.BLOCKSIZE; }
-    }
-
-    public Mesh ToMesh()
-    {
-        Mesh m = new Mesh();
         int vertsLength = 0;
         List<Vector3> verts = new List<Vector3>();
         List<Vector2> uv = new List<Vector2>();
         List<Vector3> normals = new List<Vector3>();
         List<int> tris = new List<int>();
-
-
-
 
         bool shouldWallFromTo(Vector3Int from, Vector3Int to)
         {
@@ -417,7 +463,7 @@ class Chunk
             }
             else // 4 sides
             {
-                if (this[x, y + 1, z] == BlockType.Filled)
+                if (this[new Vector3Int(x, y + 1, z)] == BlockType.Filled)
                 {
                     // pure dirt:
                     uv.Add(new Vector2(0, 0.5f));
@@ -436,116 +482,160 @@ class Chunk
 
             }
         }
-        this.Iter((x, y, z) =>
+        for (int x = 0; x < Landscape.CHUNKSIZE; x++)
         {
-
-            if (shouldWallFromTo(new Vector3Int(x, y, z), new Vector3Int(x + 1, y, z)))
+            for (int y = 0; y < Landscape.CHUNKSIZE; y++)
             {
-                verts.Add(RelativePosition(x + 1, y, z));
-                verts.Add(RelativePosition(x + 1, y + 1, z));
-                verts.Add(RelativePosition(x + 1, y + 1, z + 1));
-                verts.Add(RelativePosition(x + 1, y, z + 1));
+                for (int z = 0; z < Landscape.CHUNKSIZE; z++)
+                {
+                    if (shouldWallFromTo(new Vector3Int(x, y, z), new Vector3Int(x + 1, y, z)))
+                    {
+                        verts.Add(RelativePosition(x + 1, y, z));
+                        verts.Add(RelativePosition(x + 1, y + 1, z));
+                        verts.Add(RelativePosition(x + 1, y + 1, z + 1));
+                        verts.Add(RelativePosition(x + 1, y, z + 1));
 
 
-                Add2TriesAnd4Normals(Vector3.right, x, y, z);
+                        Add2TriesAnd4Normals(Vector3.right, x, y, z);
+                    }
+                    if (shouldWallFromTo(new Vector3Int(x, y, z), new Vector3Int(x - 1, y, z)))
+                    {
+
+                        verts.Add(RelativePosition(x, y, z + 1));
+                        verts.Add(RelativePosition(x, y + 1, z + 1));
+                        verts.Add(RelativePosition(x, y + 1, z));
+                        verts.Add(RelativePosition(x, y, z));
+                        Add2TriesAnd4Normals(Vector3.left, x, y, z);
+                    }
+                    if (shouldWallFromTo(new Vector3Int(x, y, z), new Vector3Int(x, y, z + 1)))
+                    {
+
+                        verts.Add(RelativePosition(x + 1, y, z + 1));
+                        verts.Add(RelativePosition(x + 1, y + 1, z + 1));
+                        verts.Add(RelativePosition(x, y + 1, z + 1));
+                        verts.Add(RelativePosition(x, y, z + 1));
+                        Add2TriesAnd4Normals(Vector3.forward, x, y, z);
+                    }
+                    if (shouldWallFromTo(new Vector3Int(x, y, z), new Vector3Int(x, y, z - 1)))
+                    {
+                        verts.Add(RelativePosition(x, y, z));
+                        verts.Add(RelativePosition(x, y + 1, z));
+                        verts.Add(RelativePosition(x + 1, y + 1, z));
+                        verts.Add(RelativePosition(x + 1, y, z));
+                        Add2TriesAnd4Normals(Vector3.back, x, y, z);
+                    }
+                    if (shouldWallFromTo(new Vector3Int(x, y, z), new Vector3Int(x, y + 1, z)))
+                    {
+                        verts.Add(RelativePosition(x, y + 1, z));
+                        verts.Add(RelativePosition(x, y + 1, z + 1));
+                        verts.Add(RelativePosition(x + 1, y + 1, z + 1));
+                        verts.Add(RelativePosition(x + 1, y + 1, z));
+                        Add2TriesAnd4Normals(Vector3.up, x, y, z);
+                    }
+
+                    if (shouldWallFromTo(new Vector3Int(x, y, z), new Vector3Int(x, y - 1, z)))
+                    {
+                        verts.Add(RelativePosition(x, y, z));
+                        verts.Add(RelativePosition(x + 1, y, z));
+                        verts.Add(RelativePosition(x + 1, y, z + 1));
+                        verts.Add(RelativePosition(x, y, z + 1));
+                        Add2TriesAnd4Normals(Vector3.down, x, y, z);
+                    }
+
+                }
             }
-            if (shouldWallFromTo(new Vector3Int(x, y, z), new Vector3Int(x - 1, y, z)))
-            {
+        }
 
-                verts.Add(RelativePosition(x, y, z + 1));
-                verts.Add(RelativePosition(x, y + 1, z + 1));
-                verts.Add(RelativePosition(x, y + 1, z));
-                verts.Add(RelativePosition(x, y, z));
-                Add2TriesAnd4Normals(Vector3.left, x, y, z);
-            }
-            if (shouldWallFromTo(new Vector3Int(x, y, z), new Vector3Int(x, y, z + 1)))
-            {
-
-                verts.Add(RelativePosition(x + 1, y, z + 1));
-                verts.Add(RelativePosition(x + 1, y + 1, z + 1));
-                verts.Add(RelativePosition(x, y + 1, z + 1));
-                verts.Add(RelativePosition(x, y, z + 1));
-                Add2TriesAnd4Normals(Vector3.forward, x, y, z);
-            }
-            if (shouldWallFromTo(new Vector3Int(x, y, z), new Vector3Int(x, y, z - 1)))
-            {
-                verts.Add(RelativePosition(x, y, z));
-                verts.Add(RelativePosition(x, y + 1, z));
-                verts.Add(RelativePosition(x + 1, y + 1, z));
-                verts.Add(RelativePosition(x + 1, y, z));
-                Add2TriesAnd4Normals(Vector3.back, x, y, z);
-            }
-            if (shouldWallFromTo(new Vector3Int(x, y, z), new Vector3Int(x, y + 1, z)))
-            {
-                verts.Add(RelativePosition(x, y + 1, z));
-                verts.Add(RelativePosition(x, y + 1, z + 1));
-                verts.Add(RelativePosition(x + 1, y + 1, z + 1));
-                verts.Add(RelativePosition(x + 1, y + 1, z));
-                Add2TriesAnd4Normals(Vector3.up, x, y, z);
-            }
-
-            if (shouldWallFromTo(new Vector3Int(x, y, z), new Vector3Int(x, y - 1, z)))
-            {
-                verts.Add(RelativePosition(x, y, z));
-                verts.Add(RelativePosition(x + 1, y, z));
-                verts.Add(RelativePosition(x + 1, y, z + 1));
-                verts.Add(RelativePosition(x, y, z + 1));
-                Add2TriesAnd4Normals(Vector3.down, x, y, z);
-            }
-
-            // UV MAP
-        });
-        m.vertices = verts.ToArray();
-        m.normals = normals.ToArray();
-        m.triangles = tris.ToArray();
-        m.uv = uv.ToArray();
-        //m.RecalculateNormals();
-        return m;
-
+        this.meshVertices = verts.ToArray();
+        this.meshNormals = normals.ToArray();
+        this.meshUV = uv.ToArray();
+        this.meshTriangles = tris.ToArray();
     }
 
-    // public void EndOfLife()
-    // {
-    //     Destroy(this.gameObject);
-    // }
+    public bool IsValidIndex(int x, int y, int z)
+    {
+        return x >= 0 && x < Landscape.CHUNKSIZE && y >= 0 && y < Landscape.CHUNKSIZE && z >= 0 && z < Landscape.CHUNKSIZE;
+    }
+
+    Vector3 RelativePosition(int x, int y, int z)
+    {
+        return new Vector3(x, y, z) * Landscape.BLOCKSIZE;
+    }
+
+}
+
+class Chunk
+{
+    public ChunkData data;
+    public GameObject gameObject;
+    public bool markedForDeletion;
+    public bool gameObjectCreated;
+
+    public bool IsUniform()
+    {
+        return data.filledCount == 0 || data.filledCount == Math.Pow(Landscape.CHUNKSIZE, 3);
+    }
+
+    public BlockType this[Vector3Int v]
+    {
+        get => this.data[v];
+        set => this.data[v] = value;
+    }
+
+    public BlockType this[int x, int y, int z]
+    {
+        get => this.data[x, y, z];
+        set => this.data[x, y, z] = value;
+    }
+
+
+    public Vector3 GlobalPosition
+    {
+        get { return new Vector3(this.data.pos.x, this.data.pos.y, this.data.pos.z) * Landscape.CHUNKSIZE * Landscape.BLOCKSIZE; }
+    }
+
+    public Mesh GetMesh()
+    {
+        Mesh m = new Mesh();
+        m.vertices = data.meshVertices;
+        m.normals = data.meshNormals;
+        m.triangles = data.meshTriangles;
+        m.uv = data.meshUV;
+        return m;
+    }
 
     public Chunk()
     {
-        this.pos = Vector3Int.zero;
-        this.blocks = new BlockType[Landscape.CHUNKSIZE, Landscape.CHUNKSIZE, Landscape.CHUNKSIZE];
+        this.data = new ChunkData(Vector3Int.zero);
     }
 
     public Chunk(Vector3Int pos)
     {
-        this.pos = pos;
-        this.blocks = new BlockType[Landscape.CHUNKSIZE, Landscape.CHUNKSIZE, Landscape.CHUNKSIZE];
+        this.data = new ChunkData(pos);
     }
 
-    public void Activate()
+    public void CreateGameObject()
     {
-        if (_activated) return;
+        if (gameObjectCreated) return;
         GameObject g = new GameObject();
         g.transform.position = this.GlobalPosition;
         MeshRenderer meshRenderer = g.AddComponent<MeshRenderer>();
-        meshRenderer.sharedMaterial = AssetManager.instance.WorldMaterial;
+        meshRenderer.sharedMaterial = AssetManager.Instance.WorldMaterial;
         MeshFilter meshFilter = g.AddComponent<MeshFilter>();
-        meshFilter.mesh = this.ToMesh();
+        meshFilter.mesh = this.GetMesh();
         g.AddComponent<Destroyer>();
         this.gameObject = g;
-        g.transform.SetParent(TerrainObject.instance.gameObject.transform);
-        _activated = true;
+        g.transform.SetParent(TerrainObject.Instance.gameObject.transform);
+        gameObjectCreated = true;
     }
 
-    public void Deactivate()
+    public void DestroyGameObject()
     {
-        if (!_activated) return;
+        if (!gameObjectCreated) return;
         this.gameObject.GetComponent<Destroyer>().Destroy();
-        //this.gameObject.GetComponent<Destroyer>().Destroy();
         this.gameObject = null;
-        _activated = false;
+        gameObjectCreated = false;
     }
-
-
 
     public void Iter(Action<int, int, int> callback)
     {
@@ -560,6 +650,4 @@ class Chunk
             }
         }
     }
-
-
 }

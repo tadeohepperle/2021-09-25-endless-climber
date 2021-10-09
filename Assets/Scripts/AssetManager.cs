@@ -4,30 +4,19 @@ using UnityEngine;
 
 public class AssetManager : MonoBehaviour
 {
-
     public Material WorldMaterial;
-    public static AssetManager instance;
+    private static AssetManager _instance;
+    public static AssetManager Instance { get { return _instance; } }
 
-    void Awake()
+    private void Awake()
     {
-        if (AssetManager.instance == null)
+        if (_instance != null && _instance != this)
         {
-            AssetManager.instance = this;
+            Destroy(this.gameObject);
         }
         else
         {
-            Destroy(this);
+            _instance = this;
         }
-    }
-    // Start is called before the first frame update
-    void Start()
-    {
-
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
-
     }
 }

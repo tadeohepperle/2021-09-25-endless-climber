@@ -30,7 +30,11 @@ public class CameraFollow : MonoBehaviour
     Vector3 targetPosition;
     void Update()
     {
-        targetPosition = player.position;
-        gameObject.transform.position = Vector3.Lerp(gameObject.transform.position, targetPosition + offset * cameraDistance, smoothing * Time.deltaTime);
+        if (player != null)
+        {
+            targetPosition = player.position;
+            gameObject.transform.position = Vector3.Lerp(gameObject.transform.position, targetPosition + offset * cameraDistance, smoothing * Time.deltaTime);
+
+        }
     }
 }

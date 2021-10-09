@@ -4,30 +4,18 @@ using UnityEngine;
 
 public class TerrainObject : MonoBehaviour
 {
-    public static TerrainObject instance;
+    private static TerrainObject _instance;
+    public static TerrainObject Instance { get { return _instance; } }
 
-    void Awake()
+    private void Awake()
     {
-        if (TerrainObject.instance == null)
+        if (_instance != null && _instance != this)
         {
-            TerrainObject.instance = this;
+            Destroy(this.gameObject);
         }
         else
         {
-            Destroy(this);
+            _instance = this;
         }
-    }
-
-
-    void Start()
-    {
-        Landscape.Instance.SendPlayerPositionForUpdates(this.gameObject.transform.position);
-    }
-
-
-    // Update is called once per frame
-    void Update()
-    {
-
     }
 }
