@@ -16,7 +16,12 @@ public class GameManager : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        Landscape.Instance.UpdateChunkGameObjectListToChunkPos(Vector3Int.zero);
+        Initialize();
+    }
+
+    async void Initialize()
+    {
+        await Landscape.Instance.UpdateChunkGameObjectListToChunkPos(Vector3Int.zero);
         PlayerMovement.Instance.Initialize();
         CameraFollow.Instance.Initialize();
     }

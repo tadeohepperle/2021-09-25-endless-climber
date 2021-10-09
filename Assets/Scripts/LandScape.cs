@@ -7,7 +7,8 @@ using Unity.Jobs;
 using System.Diagnostics;
 using System.Threading.Tasks;
 
-static class Vector3IntExtrensions
+#region VectorExtensions
+static class Vector3Extrensions
 {
     const float EPSILON = 0.0001f;
 
@@ -55,27 +56,38 @@ static class Vector3IntExtrensions
 
 }
 
+#endregion VectorExtensions
 
 class Landscape
 {
+
+    #region Singleton and Contructors
     private static Landscape _instance;
     public static Landscape Instance
     {
         get { if (_instance == null) _instance = new Landscape(); return _instance; }
     }
 
+    public Landscape()
+    {
+        this._chunks = new Dictionary<Vector3Int, Chunk>();
+
+    }
+    #endregion Singleton and Contructors
+
+    #region Properties and Constants
     public const int CHUNKSIZE = 10;
     public const int BLOCKSIZE = 1;
-    public const float NOISEAMPLITUDE = 6f;
+    public const float NOISEAMPLITUDE = 2f;
     public const float NOISESCALE = 0.2f;
     public const int CHUNKRADIUSAROUNDPLAYER = 2;
     public const int GETSURROUNDINGRADIUS = 2;
     Dictionary<Vector3Int, Chunk> _chunks = new Dictionary<Vector3Int, Chunk>();
-
-
     private Vector3Int lastUpdateChunkPos = Vector3Int.zero;
 
+    #endregion Properties and Constants
 
+    #region Accessors
     public Dictionary<Vector3Int, BlockType> GetSurrounding(Vector3Int blockPos)
     {
         Dictionary<Vector3Int, BlockType> surrounding = new Dictionary<Vector3Int, BlockType>();
@@ -99,6 +111,82 @@ class Landscape
         return surrounding;
     }
 
+    public Chunk this[int x, int y, int z]
+    {
+        get { return GetChunk(x, y, z); }
+
+    }
+
+    public Chunk this[Vector3Int vec]
+    {
+        get { return GetChunk(vec); }
+
+    }
+
+    public Chunk GetChunk(int x, int y, int z)
+    {
+        return GetChunk(new Vector3Int(x, y, z));
+    }
+
+    public Chunk GetChunk(Vector3Int vec)
+    {
+        if (_chunks.ContainsKey(vec))
+        {
+            return _chunks[vec];
+        }
+        return null;
+    }
+
+    bool RemoveChunk(int x, int y, int z)
+    {
+        return RemoveChunk(new Vector3Int(x, y, z));
+    }
+
+    bool RemoveChunk(Vector3Int vec)
+    {
+        Chunk c = GetChunk(vec);
+        if (c != null)
+        {
+            c.DestroyGameObject();
+            this._chunks.Remove(vec); return true;
+        }
+        else return false;
+    }
+
+    public bool AddChunk(int x, int y, int z)
+    {
+        return AddChunk(new Vector3Int(x, y, z));
+    }
+
+    public bool AddChunk(Vector3Int vec)
+    {
+        Chunk c = GetChunk(vec);
+        if (c != null)
+        {
+            return false;
+        }
+        else
+        {
+            Chunk newChunk = new Chunk(vec);
+            _chunks[vec] = newChunk;
+            return true;
+        }
+    }
+
+    public Vector3Int ChunkPosFromPlayerPosition(Vector3 playerPosition)
+    {
+        Vector3 v = playerPosition / (CHUNKSIZE * BLOCKSIZE);
+        return new Vector3Int((int)v.x, (int)v.y, (int)v.z);
+    }
+
+    public static Vector3Int GlobalPos(Vector3Int chunkPos, Vector3Int localPos)
+    {
+        return chunkPos * CHUNKSIZE + localPos;
+    }
+
+    #endregion Accessors 
+
+    #region UpdateChunks
     public void SendPlayerPositionForUpdates(Vector3 playerPosition)
     {
         Vector3Int chunkPos = ChunkPosFromPlayerPosition(playerPosition);
@@ -110,7 +198,7 @@ class Landscape
 
     }
 
-    public async void UpdateChunkGameObjectListToChunkPos(Vector3Int chunkPos)
+    public async Task UpdateChunkGameObjectListToChunkPos(Vector3Int chunkPos)
     {
         List<ChunkData> newlyCreatedChunks = new List<ChunkData>();
         foreach (KeyValuePair<Vector3Int, Chunk> keyValuePair in _chunks)
@@ -182,7 +270,7 @@ class Landscape
         }
 
         s.Stop();
-        UnityEngine.Debug.Log("Time elampsed: " + s.ElapsedMilliseconds + "ms | Chunks handled: " + newlyCreatedChunks.Count + " | Time per Chunk: " + (float)s.ElapsedMilliseconds / newlyCreatedChunks.Count + "ms");
+        //        UnityEngine.Debug.Log("Time elampsed: " + s.ElapsedMilliseconds + "ms | Chunks handled: " + newlyCreatedChunks.Count + " | Time per Chunk: " + (float)s.ElapsedMilliseconds / newlyCreatedChunks.Count + "ms");
     }
 
     public Task<ChunkData> ChunkGenerationTask(ChunkData chunkData)
@@ -195,109 +283,44 @@ class Landscape
         });
     }
 
+    #endregion
 
-    public Landscape()
-    {
-        this._chunks = new Dictionary<Vector3Int, Chunk>();
-
-    }
-
-    public Vector3Int ChunkPosFromPlayerPosition(Vector3 playerPosition)
-    {
-        Vector3 v = playerPosition / (CHUNKSIZE * BLOCKSIZE);
-        return new Vector3Int((int)v.x, (int)v.y, (int)v.z);
-    }
-
+    #region Playerfunctions
     public Vector3Int GetPlayerStartingPos()
     {
-        return new Vector3Int(0, (int)GetNoise(new Vector3Int(0, 0, 0)), 0);
+        return new Vector3Int(0, GetHeight(new Vector3Int(0, 0, 0)), 0);
     }
+    #endregion Playerfunctions
 
-    public Chunk this[int x, int y, int z]
+    #region Terrain Generation
+    public float GetNoise(Vector3Int globalPos)
     {
-        get { return GetChunk(x, y, z); }
-
-    }
-
-    public Chunk this[Vector3Int vec]
-    {
-        get { return GetChunk(vec); }
-
-    }
-
-
-
-    public Chunk GetChunk(int x, int y, int z)
-    {
-        return GetChunk(new Vector3Int(x, y, z));
-    }
-
-    public Chunk GetChunk(Vector3Int vec)
-    {
-        if (_chunks.ContainsKey(vec))
-        {
-            return _chunks[vec];
-        }
-        return null;
-    }
-
-    bool RemoveChunk(int x, int y, int z)
-    {
-        return RemoveChunk(new Vector3Int(x, y, z));
-    }
-
-    bool RemoveChunk(Vector3Int vec)
-    {
-        Chunk c = GetChunk(vec);
-        if (c != null)
-        {
-            c.DestroyGameObject();
-            this._chunks.Remove(vec); return true;
-        }
-        else return false;
-    }
-
-    public bool AddChunk(int x, int y, int z)
-    {
-        return AddChunk(new Vector3Int(x, y, z));
-    }
-
-    public bool AddChunk(Vector3Int vec)
-    {
-        Chunk c = GetChunk(vec);
-        if (c != null)
-        {
-            return false;
-        }
-        else
-        {
-            Chunk newChunk = new Chunk(vec);
-            _chunks[vec] = newChunk;
-            return true;
-        }
-    }
-
-    public BlockType GetBlockType(Vector3Int globalPos)
-    {
-        float height = (globalPos.x + globalPos.z) / 2;
-        height += GetNoise(globalPos);
-        if (globalPos.y > height) return BlockType.None;
-        else return BlockType.Filled;
-    }
-
-    public float GetNoise(Vector3Int pos)
-    {
-        float x = pos.x * NOISESCALE;
-        float z = pos.z * NOISESCALE;
+        float x = globalPos.x * NOISESCALE;
+        float z = globalPos.z * NOISESCALE;
         float wave1 = Mathf.PerlinNoise(x, z) * NOISEAMPLITUDE * 2 - NOISEAMPLITUDE;
         float wave2 = Mathf.PerlinNoise(x / 10, z / 10) * NOISEAMPLITUDE * 10 - NOISEAMPLITUDE * 5;
         return wave1 + wave2;
     }
 
-    public static Vector3Int GlobalPos(Vector3Int chunkPos, Vector3Int localPos)
+    public float GetGeneralHeight(Vector3Int globalPos)
     {
-        return chunkPos * CHUNKSIZE + localPos;
+        return globalPos.z / 2;
     }
+
+    public int GetHeight(Vector3Int globalPos)
+    {
+        return (int)(GetGeneralHeight(globalPos) + GetNoise(globalPos));
+    }
+
+    public BlockType GetBlockType(Vector3Int globalPos)
+    {
+        float height = GetHeight(globalPos);
+        if (globalPos.y >= height) return BlockType.None;
+        else return BlockType.Filled;
+    }
+
+    #endregion Terrain Generation
+
 
 }
 

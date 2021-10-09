@@ -20,7 +20,7 @@ public class PlayerMovement : MonoBehaviour
     }
     public Edge edge = new Edge(EdgeMode.None);
     public Vector3Int lastRollUpInput;
-
+    public bool initialized;
     Dictionary<Vector3Int, BlockType> surrounding;
 
     public GameObject point1;
@@ -46,7 +46,7 @@ public class PlayerMovement : MonoBehaviour
         playerTransform.position = actualPos;
         playerTransform.rotation = Quaternion.Euler(0, 0, 0);
         surrounding = Landscape.Instance.GetSurrounding(BlockPos);
-        Debug.Log(surrounding);
+        initialized = true;
     }
 
     void Update()
@@ -59,14 +59,11 @@ public class PlayerMovement : MonoBehaviour
     public Vector3 movementDirection;
     void FixedUpdate()
     {
+        if (!initialized) return;
         input = InputHandler.CurrentInput;
-
         targetBlockPos = CalculateTargetBlockPos(input);
-
         movementDirection = (((Vector3)targetBlockPos) - actualPos).normalized;
-
         actualPos += (movementDirection) * MOVEMENT_STEP;
-
         Vector3Int prevBlockPos = BlockPos;
         BlockPos = actualPos.roundToInt();
         if (BlockPos != prevBlockPos)

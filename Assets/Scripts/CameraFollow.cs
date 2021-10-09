@@ -15,8 +15,8 @@ public class CameraFollow : MonoBehaviour
     Transform player;
 
     public float cameraDistance = 5;
-    public float smoothing = 4f;
-    public Vector3 offset = new Vector3(-1, 0.8f, 0);
+    public float smoothing = 1f;
+    public Vector3 offset = new Vector3(0, 0.8f, -1);
     // Start is called before the first frame update
     public void Initialize()
     {
@@ -34,7 +34,7 @@ public class CameraFollow : MonoBehaviour
         {
             targetPosition = player.position;
             gameObject.transform.position = Vector3.Lerp(gameObject.transform.position, targetPosition + offset * cameraDistance, smoothing * Time.deltaTime);
-
+            gameObject.transform.LookAt(player.position);
         }
     }
 }
