@@ -155,7 +155,7 @@ class Landscape
         Stopwatch s = new Stopwatch();
         s.Start();
 
-        // Wihtout multithreding: approx. 1,4ms per Chunk
+        // // Wihtout multithreding: approx. 1,4ms per Chunk
         // for (int i = 0; i < newlyCreatedChunks.Count; i++)
         // {
         //     newlyCreatedChunks[i].GenerateBlocks();
@@ -212,32 +212,6 @@ class Landscape
     {
         return new Vector3Int(0, (int)GetNoise(new Vector3Int(0, 0, 0)), 0);
     }
-
-
-    // public void Draw()
-    // {
-    //     // Material mat = new Material(Shader.Find("Standard"));
-    //     foreach (Chunk c in _chunks)
-    //     {
-    //         // c.Iter((x, y, z) =>
-    //         // {
-    //         //     if (c.blocks[x, y, z] > 0)
-    //         //     {
-    //         //         GameObject g = GameObject.CreatePrimitive(PrimitiveType.Cube);
-    //         //         g.transform.position = new Vector3((c.pos.x * CHUNKSIZE + x) * BLOCKSIZE, (c.pos.y * CHUNKSIZE + y) * BLOCKSIZE, (c.pos.z * CHUNKSIZE + z) * BLOCKSIZE);
-
-    //         //     }
-    //         // });
-
-    //         GameObject g = new GameObject();
-    //         g.transform.position = c.GlobalPosition;
-    //         MeshRenderer meshRenderer = g.AddComponent<MeshRenderer>();
-    //         meshRenderer.sharedMaterial = AssetManager.instance.WorldMaterial;
-    //         MeshFilter meshFilter = g.AddComponent<MeshFilter>();
-    //         meshFilter.mesh = c.ToMesh();
-    //     }
-    // }
-
 
     public Chunk this[int x, int y, int z]
     {
@@ -302,27 +276,6 @@ class Landscape
             return true;
         }
     }
-
-
-    // public Chunk GenerateChunk(Vector3Int pos)
-    // {
-
-    //     Chunk c = new Chunk(pos);
-    //     c.Iter((int x, int y, int z) =>
-    //     {
-    //         Vector3Int globalPos = Landscape.GlobalPos(c.pos, new Vector3Int(x, y, z));
-    //         float cutoff = (globalPos.x + globalPos.z) / 2;
-    //         // add some PerlinNoise:
-    //         float noise = GetNoise(globalPos);
-    //         cutoff += noise;
-    //         bool filled = globalPos.y < cutoff;
-    //         if (filled) c.filledCount++;
-    //         c.blocks[x, y, z] = filled ? BlockType.Filled : BlockType.None;
-    //     });
-    //     c.Activate(); // vielleicht auslagern in asynchrone methode
-    //     c.landscape = this;
-    //     return c;
-    // }
 
     public BlockType GetBlockType(Vector3Int globalPos)
     {

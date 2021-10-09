@@ -46,6 +46,7 @@ public class PlayerMovement : MonoBehaviour
         playerTransform.position = actualPos;
         playerTransform.rotation = Quaternion.Euler(0, 0, 0);
         surrounding = Landscape.Instance.GetSurrounding(BlockPos);
+        Debug.Log(surrounding);
     }
 
     void Update()
@@ -120,6 +121,7 @@ public class PlayerMovement : MonoBehaviour
         Vector3 actualDir = actualPos - BlockPos;
         bool HorizontalDirFree()
         {
+
             return surrounding[BlockPos + input] == BlockType.None &&
             surrounding[BlockPos + Vector3Int.up] == BlockType.None &&
             surrounding[BlockPos + input + Vector3Int.up] == BlockType.None &&
@@ -150,10 +152,6 @@ public class PlayerMovement : MonoBehaviour
         {
 
             if (actualDir.Approximately(Vector3.zero)) actualDir = Vector3.zero;
-
-            //DebugUtility.Watch("verticalClimb", vecticalDirFree.ToString());
-            //DebugUtility.Watch("horizontal Move possible", horizontalDirFree.ToString());
-
             if (horizontalDirFree && SameDirectionOrZero(input, actualDir))
             {
                 lastRollUpInput = Vector3Int.zero;
@@ -174,7 +172,6 @@ public class PlayerMovement : MonoBehaviour
         {
             targetBlockPos = BlockPos + Vector3Int.down;
         }
-        //DebugUtility.Watch("targetBlockPos", targetBlockPos.ToString());
         return targetBlockPos;
     }
 
@@ -325,8 +322,6 @@ public struct Edge
     {
         get { return point2 - point1; }
     }
-
-    // public Edge() : this(EdgeMode.None) { }
 
     (Vector3Int, Vector3Int) Points(EdgeMode em)
     {
